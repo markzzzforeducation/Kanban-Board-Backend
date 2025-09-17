@@ -8,20 +8,22 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  boards    Board[]  @relation("BoardMembers")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String
+  ownedBoards Board[] @relation("BoardOwner")
+  boards     Board[]  @relation("BoardMembers")
+  assignedTasks Task[] @relation("TaskAssignees")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Board {
   id        String   @id @default(cuid())
   name      String
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id])
+  owner     User     @relation("BoardOwner", fields: [ownerId], references: [id])
   members   User[]   @relation("BoardMembers")
   columns   Column[]
   createdAt DateTime @default(now())
@@ -38,16 +40,16 @@ model Column {
 }
 
 model Task {
-  id        String   @id @default(cuid())
-  title     String
+  id          String   @id @default(cuid())
+  title       String
   description String?
-  order     Int
-  columnId  String
-  column    Column   @relation(fields: [columnId], references: [id])
-  assignees User[]   @relation("TaskAssignees")
-  tags      String[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  order       Int
+  columnId    String
+  column      Column   @relation(fields: [columnId], references: [id])
+  assignees   User[]   @relation("TaskAssignees")
+  tags        String   // Changed from String[] to String for SQLite compatibility
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 

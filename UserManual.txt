@@ -1,0 +1,57 @@
+========================================
+คู่มือใช้งาน Kanban API 
+========================================
+
+---
+[ 1. เริ่มต้น ]
+---
+- เปิดโปรเจกต์ backend
+- ติดตั้ง: npm install
+- รันเซิร์ฟเวอร์: npm run dev
+- API จะทำงานที่: http://localhost:5174
+- กรณีที่รัน backend แล้วยังใช้งานไม่ได้ ให้ลองเปิดด้วย เรียกใช้ในฐานะผู้ดูแล (Run as administrator) 
+
+
+---
+[ 2. ต้อง Login ก่อนเสมอ ]
+---
+1. Login เพื่อเอา "Token" (รหัสพิเศษ)
+2. เอา Token ไปใช้กับคำสั่งอื่นๆ ทุกครั้ง
+
+วิธีใช้ Token:
+- ในโปรแกรม Postman หรือในโค้ด ให้ใส่ไว้ใน Header แบบนี้
+  Authorization: Bearer <เอา Token ที่ได้มาใส่ตรงนี้>
+
+
+---
+[ 3. คำสั่งพื้นฐาน ]
+---
+
+[ เข้าสู่ระบบ (Login) ]
+- Method: POST
+- Endpoint: /api/auth/login
+- Body ที่ต้องส่ง:
+  {
+      "email": "user@example.com",
+      "password": "1234"
+  }
+- **สิ่งที่คุณต้องเอาจาก Response คือ "token"**
+
+
+[ ดูคอลัมน์ทั้งหมด ]
+- Method: GET
+- Endpoint: /api/columns
+- **อย่าลืมใส่ Token ใน Header**
+
+
+[ เพิ่มงานใหม่ (Create Task) ]
+- Method: POST
+- Endpoint: /api/tasks
+- **อย่าลืมใส่ Token ใน Header**
+- Body ที่ต้องส่ง (ตัวอย่าง):
+  {
+      "title": "ทำสไลด์นำเสนอ",
+      "columnId": "col-1"
+  }
+
+========================================
