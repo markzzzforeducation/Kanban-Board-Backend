@@ -4,6 +4,7 @@ import cors from 'cors';
 import { json } from 'express';
 import { router as authRouter } from './routes/auth';
 import { router as boardsRouter } from './routes/boards';
+import { router as notificationsRouter } from './routes/notifications';
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/boards', boardsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 const PORT = Number(process.env.PORT || 5174);
 app.listen(PORT, () => {

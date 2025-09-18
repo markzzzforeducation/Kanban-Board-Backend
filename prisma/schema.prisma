@@ -15,6 +15,7 @@ model User {
   ownedBoards Board[] @relation("BoardOwner")
   boards     Board[]  @relation("BoardMembers")
   assignedTasks Task[] @relation("TaskAssignees")
+  notifications Notification[] @relation("UserNotifications")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -26,6 +27,7 @@ model Board {
   owner     User     @relation("BoardOwner", fields: [ownerId], references: [id])
   members   User[]   @relation("BoardMembers")
   columns   Column[]
+  notifications Notification[] @relation("BoardNotifications")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -53,3 +55,14 @@ model Task {
 }
 
 
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserNotifications", fields: [userId], references: [id])
+  type        String   // e.g. 'INVITE'
+  message     String
+  boardId     String?
+  board       Board?   @relation("BoardNotifications", fields: [boardId], references: [id])
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
