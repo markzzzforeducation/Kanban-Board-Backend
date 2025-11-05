@@ -7,11 +7,25 @@ import { OAuth2Client } from 'google-auth-library';
 
 export const router = Router();
 
+// Validate Google OAuth environment variables
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+  console.error('[Backend] Google OAuth Config Error:', {
+    CLIENT_ID: GOOGLE_CLIENT_ID ? '✓ Set' : '✗ Missing',
+    CLIENT_SECRET: GOOGLE_CLIENT_SECRET ? '✓ Set' : '✗ Missing',
+    REDIRECT_URI: GOOGLE_REDIRECT_URI || '✗ Missing',
+  });
+  console.error('[Backend] Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in .env file');
+}
+
 // Google OAuth client
 const googleClient = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5173/auth/google/callback'
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI
 );
 
 const registerSchema = z.object({
@@ -50,17 +64,36 @@ router.post('/login', async (req, res) => {
 // Google OAuth endpoints
 router.post('/google/initiate', async (req, res) => {
   try {
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.CORS_ORIGIN || 'http://localhost:5173'}/auth/google/callback`;
+    // Validate environment variables
+    if (!GOOGLE_REDIRECT_URI) {
+      console.error('[Backend] GOOGLE_REDIRECT_URI not configured');
+      return res.status(500).json({ error: 'GOOGLE_REDIRECT_URI not configured' });
+    }
+
+    if (!GOOGLE_CLIENT_ID) {
+      console.error('[Backend] GOOGLE_CLIENT_ID not configured');
+      return res.status(500).json({ error: 'GOOGLE_CLIENT_ID not configured' });
+    }
+
+    // Generate random state for security
+    const generateRandomState = () => {
+      return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    };
+
     const authUrl = googleClient.generateAuthUrl({
       access_type: 'offline',
-      scope: ['profile', 'email'],
+      scope: ['openid', 'email', 'profile'],
       prompt: 'select_account',
-      redirect_uri: redirectUri
+      redirect_uri: GOOGLE_REDIRECT_URI,
+      state: generateRandomState()
     });
-    console.log('[GOOGLE/INITIATE] redirect_uri:', redirectUri);
+
+    console.log('[Backend] Generated authUrl:', authUrl);
+    console.log('[Backend] Using redirect_uri:', GOOGLE_REDIRECT_URI);
+
     res.json({ authUrl });
   } catch (error) {
-    console.error('Google OAuth initiate error:', error);
+    console.error('[Backend] Google OAuth initiate error:', error);
     res.status(500).json({ error: 'Failed to initiate Google OAuth' });
   }
 });
@@ -68,16 +101,30 @@ router.post('/google/initiate', async (req, res) => {
 router.post('/google/callback', async (req, res) => {
   try {
     const { code } = req.body;
-    if (!code) return res.status(400).json({ error: 'Authorization code required' });
 
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.CORS_ORIGIN || 'http://localhost:5173'}/auth/google/callback`;
-    console.log('[GOOGLE/CALLBACK] redirect_uri:', redirectUri);
-    console.log('[GOOGLE/CALLBACK] GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID);
-    console.log('[GOOGLE/CALLBACK] GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? '***SET***' : 'NOT SET');
+    if (!code) {
+      return res.status(400).json({ error: 'Authorization code is required' });
+    }
+
+    // Validate environment variables
+    if (!GOOGLE_REDIRECT_URI) {
+      console.error('[Backend] GOOGLE_REDIRECT_URI not configured');
+      return res.status(500).json({ error: 'GOOGLE_REDIRECT_URI not configured' });
+    }
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      console.error('[Backend] Google OAuth credentials not configured');
+      return res.status(500).json({ error: 'Google OAuth credentials not configured' });
+    }
+
+    console.log('[Backend] Google OAuth callback received');
+    console.log('[Backend] Using redirect_uri:', GOOGLE_REDIRECT_URI);
+    console.log('[Backend] GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID);
+    console.log('[Backend] GOOGLE_CLIENT_SECRET:', GOOGLE_CLIENT_SECRET ? '***SET***' : 'NOT SET');
 
     const { tokens } = await googleClient.getToken({
       code,
-      redirect_uri: redirectUri
+      redirect_uri: GOOGLE_REDIRECT_URI
     });
     googleClient.setCredentials(tokens);
 
@@ -88,7 +135,7 @@ router.post('/google/callback', async (req, res) => {
 
     const ticket = await googleClient.verifyIdToken({
       idToken: tokens.id_token!,
-      audience: process.env.GOOGLE_CLIENT_ID
+      audience: GOOGLE_CLIENT_ID
     });
 
     const payload = ticket.getPayload();
@@ -130,7 +177,13 @@ router.post('/google/callback', async (req, res) => {
     }
 
     // Generate JWT token
-    const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' });
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+      console.error('[Backend] JWT_SECRET not configured');
+      return res.status(500).json({ error: 'JWT_SECRET not configured' });
+    }
+
+    const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '24h' });
 
     res.json({
       token,
@@ -142,9 +195,34 @@ router.post('/google/callback', async (req, res) => {
         provider: user.provider
       }
     });
-  } catch (error) {
-    console.error('Google OAuth callback error:', error);
-    res.status(500).json({ error: 'Google authentication failed' });
+  } catch (error: any) {
+    console.error('[Backend] Google OAuth callback error:', error);
+    console.error('[Backend] Error details:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.data
+    });
+
+    // Provide more specific error messages
+    if (error.message?.includes('redirect_uri_mismatch')) {
+      return res.status(400).json({
+        error: 'Redirect URI mismatch. Please check GOOGLE_REDIRECT_URI in .env and Google Cloud Console settings.'
+      });
+    }
+
+    if (error.message?.includes('invalid_client')) {
+      return res.status(400).json({
+        error: 'Invalid client credentials. Please check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.'
+      });
+    }
+
+    if (error.message?.includes('invalid_grant')) {
+      return res.status(400).json({
+        error: 'Authorization code expired or invalid. Please try logging in again.'
+      });
+    }
+
+    res.status(400).json({ error: 'Google authentication failed' });
   }
 });
 
@@ -156,7 +234,7 @@ router.post('/google', async (req, res) => {
 
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID
+      audience: GOOGLE_CLIENT_ID
     });
 
     const payload = ticket.getPayload();
@@ -188,7 +266,13 @@ router.post('/google', async (req, res) => {
       }
     }
 
-    const token = jwt.sign({ sub: user.id }, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '7d' });
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+      console.error('[Backend] JWT_SECRET not configured');
+      return res.status(500).json({ error: 'JWT_SECRET not configured' });
+    }
+
+    const token = jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '24h' });
 
     res.json({
       token,
